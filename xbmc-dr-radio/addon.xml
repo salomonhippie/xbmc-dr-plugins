@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.dr-netradio"
+       name="DR netradio"
+       version="0.0.1"
+       provider-name="Salomon">
+  <requires>
+    <import addon="xbmc.python" version="1.0"/>
+  </requires>
+  <extension point="xbmc.python.script"
+             library="default.py" />
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en">Listen to Danmarks Radio net radio.</summary>
+    <description>Can play P1, P2, P3, and P4</description>
+    <platform>all</platform>
+  </extension>
+</addon>
