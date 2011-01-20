@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.drtv"
-       name="DR TV"
-       version="0.0.1"
+<addon id="plugin.video.drtv"
+       name="DR tv"
+       version="0.2"
        provider-name="salomon">
   <requires>
     <import addon="xbmc.python" version="1.0"/>
   </requires>
-  <extension point="xbmc.python.script"
-             library="default.py" />
+  <extension point="xbmc.python.pluginsource" library="default.py">
+    <provides>video</provides>
+  </extension>
   <extension point="xbmc.addon.metadata">
     <summary lang="en">Watch Danmarks Radio online tv.</summary>
     <description></description>

@@ -1,14 +1,12 @@
-import os
 import sys
-import traceback
-import xbmcgui
-import xbmc
+import xbmc, xbmcgui, xbmcaddon, xbmcplugin
 import re
 from urllib2 import Request, urlopen, unquote
 
 baseURL = "http://www.dr.dk/odp/"
 allURL  = "default.aspx?template=flad_alle_programserier"
-
+epsInfoUrl = "default.aspx?template=programserie&guid=" #concat with prog GUID
+epsLinkUrl = "default.aspx?template=flad_programserie&guid=" #concat with prog GUID
 
 def unescape(s):
         s = s.replace("&lt;", "<")
@@ -16,108 +14,73 @@ def unescape(s):
         s = s.replace("&amp;", "&")
         return s
 
-
-class TVGUI(xbmcgui.Window):	
-	def __init__(self):
-		self.indexProgs = 0
-		self.indexEpis = 0
-		self.doEpis = False
-	 	self.progTitle = xbmcgui.ControlLabel(100,100,500,60,'')
-		self.episTitle  = xbmcgui.ControlLabel(100,120,200,60,'')
-		self.addControl(self.progTitle)
-		self.addControl(self.episTitle)
-		self.player = xbmc.Player(xbmc.PLAYER_CORE_DVDPLAYER);
-		self.progs = self.getProgrammes(Request(baseURL+allURL))
-		self.epis = []
-		self.__updateGUI()
-
-	def __del__(self):
-		#self.player.stop()
-		pass
-
-	def __playCurrent(self):
-		if self.doEpis:
-			self.player.play(self.getVideoURL(Request(self.epis[self.indexEpis][1])))
-			#self.__updateGUI()
-			pass
-		else:
-			self.indexEpis = 0
-			self.epis = self.getEpisodes(Request(baseURL+self.progs[self.indexProgs][1]))
-			self.doEpis = True
-			self.__updateGUI()
-			
-	def __next(self):
-		if self.doEpis:
-			self.indexEpis += 1
-			if (self.indexEpis >= len(self.epis)):
-				self.indexEpis = 0
-		else:
-			self.indexProgs += 1
-			if (self.indexProgs >= len(self.progs)):
-				self.indexProgs = 0
-		self.__updateGUI()
-
-	def __prev(self):
-		if self.doEpis:
-			self.indexEpis -= 1
-			if (self.indexEpis < 0):
-				self.indexEpis = max(len(self.epis) - 1, 0)
-		else:
-			self.indexProgs -= 1
-			if (self.indexProgs < 0):
-				self.indexProgs = max(len(self.progs) - 1, 0)
-		self.__updateGUI()
-
-	def __updateGUI(self):
-		# if (self.playing):
-		# 	txt += ' - playing'
-		self.progTitle.setLabel(self.progs[self.indexProgs][0])
-		if self.doEpis:
-			if len(self.epis) == 0:
-				self.episTitle.setLabel("Empty List")
-			else:
-				self.episTitle.setLabel(self.epis[self.indexEpis][0])
-		else:
-			self.episTitle.setLabel("")
-
-	def getVideoURL(self, req):
-		return req.get_full_url()
-		# response = urlopen(req)
-		# lines = response.readlines()
-		# pass
-
-	def getEpisodes(self, req):
-		response = urlopen(req)
-		lines = response.readlines()
-		reTitle = re.compile('.*<div class="programTitle">.*<span class="date">(.*)</span></div>')
-		reLink = re.compile('.*<a href="(.*)">')
-		lookForLink = False
-		title = "";
-		link = "";
-		pairs = []
-		for line in lines:
-			line = unescape(line)
-			if lookForLink:
-				res = re.match(reLink, line)
-				if res:
-					link = res.group(1)
-					lookForLink = False
-					pairs.append((title, link))
-			else:
-				res = re.match(reTitle, line)
-				if res:
-					title = res.group(1)
-					lookForLink = True
-		return pairs
+class DRtv:
 	
-	def getProgrammes(self, req):
-		response = urlopen(req)
+	def __init__(self,h,p,a):
+		self.handle = h
+		self.pluginURL = p
+		self.arg = a
+		if self.arg.startswith("?show"):
+			self.listEpisodes()
+		elif self.arg.startswith("?eps"):
+			self.playEpisode()
+		else:
+			self.listProgs()
+	
+	def getProgrammes(self, url):
+		response = urlopen(Request(url))
 		lines = response.readlines()
 		reTitle = re.compile('.*<div class="programTitle">(.*)</div>')
 		reLink = re.compile('.*<a href="(.*)">')
+		reGUID = re.compile('.*<a href=".*guid=(.*)">')
 		lookForLink = False
 		title = "";
 		link = "";
+		pairs = []
+		for line in lines:
+			line = unescape(line)
+			if lookForLink:
+				# tmp = re.match(reUid, line)
+				# if tmp:
+				# 	guid = tmp.group(1)
+				# 	print "DR GUID: " + guid
+				# else:
+				# 	print "DR NO GUID"
+				# res = re.match(reLink, line)
+				res = re.match(reGUID, line)
+				if res:
+					link = res.group(1)
+					lookForLink = False
+					pairs.append((title, link))
+				# if res:
+				# 	link = res.group(1)
+				# 	lookForLink = False
+				# 	pairs.append((title, link))
+			else:
+				res = re.match(reTitle, line)
+				if res:
+					title = res.group(1)
+					lookForLink = True
+		return pairs
+
+	def getEpisodes(self, guid):
+		response = urlopen(Request(baseURL + epsLinkUrl + guid))
+		infoResponse = urlopen(Request(baseURL + epsInfoUrl + guid))
+		lines = response.readlines()
+		infoLines = infoResponse.readlines()
+		reDate = re.compile('.*<div class="programTitle">.*<span class="date">(.*)</span></div>')
+		reLink = re.compile('.*<a href="(.*)">')
+
+		reInfoTitle = re.compile('.*>(.*)<.*')
+		reInfoImg = re.compile('.*<img src="(.*)" .*')
+		reInfoDesc = re.compile('.*>(.*)<.*')
+		
+		lookForLink = False
+		title = ""
+		link = ""
+		desc = ""
+		img = ""
+		date = ""
 		pairs = []
 		for line in lines:
 			line = unescape(line)
@@ -126,47 +89,75 @@ class TVGUI(xbmcgui.Window):
 				if res:
 					link = res.group(1)
 					lookForLink = False
-					pairs.append((title, link))
+			 		pairs.append((title, date, link, desc, img))
 			else:
-				res = re.match(reTitle, line)
+				res = re.match(reDate, line)
 				if res:
-					title = res.group(1)
+					date = res.group(1)
 					lookForLink = True
+					## find info
+					reInfoStart = re.compile('.*' + date + '.*')
+					desc = ""
+					img = ""
+					title = ""
+					for i in range(0, len(infoLines)):
+						infoRes = re.match(reInfoStart, infoLines[i])
+						if infoRes:
+ 							infoRes = re.match(reInfoDesc, infoLines[i+1])
+							if infoRes:
+								desc = infoRes.group(1)
+								# print "DESC: " + desc
+							infoRes = re.match(reInfoImg, infoLines[i-2])
+							if infoRes:
+								img = infoRes.group(1)
+								# print "IMG: " + img
+							infoRes = re.match(reInfoTitle, infoLines[i-1])
+							if infoRes:
+								title = infoRes.group(1)
+								# print "TITLE: " + title
+							break
 		return pairs
-					
-	def onAction(self, action):
- 		"""Handle user input events."""
- 		try: 
- 			if action.getId() == 10: # exit
-				if self.doEpis:
-					self.doEpis = False
-					self.__updateGUI()
-				else:
-					self.close()
 
-			if action.getId() == 1: # left
-				self.__prev()
+	def getVideoURL(self, req):
+		return req.get_full_url()
+	
+	def endDirs(self):
+		xbmcplugin.endOfDirectory(self.handle)
+	
+	def epToItem(self, ep):
+		li = xbmcgui.ListItem(ep[1])
+		li.setInfo("video", {"title": ep[0], "plotoutline": ep[3]})
+		li.setThumbnailImage(ep[4])
+		return (self.getVideoURL(Request(ep[2])), li, False)
 
-			if action.getId() == 2: # right
-				self.__next()
-								
-			if action.getId() == 3: # up
-				if self.doEpis:
-					self.doEpis = False
-					self.__updateGUI()
+	def listEpisodes(self):
+		showUrl = self.arg[6:]
+		eps = self.getEpisodes(showUrl)
+		eps.reverse()
+		items = map(self.epToItem, eps);
+		xbmcplugin.addDirectoryItems(self.handle, items, len(items))
+		self.endDirs()
+		
+	def progToDir(self, prog):
+		return (self.pluginURL+"?show=" + prog[1], xbmcgui.ListItem(prog[0]), True)
 
-			if action.getId() == 4: # down
-				if not self.doEpis:
-					self.__playCurrent()
+	def listProgs(self):
+		progs = self.getProgrammes(baseURL+allURL)		
+		dirs = map(self.progToDir, progs)
+		xbmcplugin.addDirectoryItems(self.handle, dirs, len(dirs))
+		self.endDirs()
 
-			if action.getId() == 7: # "enter"
-					self.__playCurrent()
+	def playEpisode(self):
+		epsUrl = self.arg[5:]
+		vurl = self.getVideoURL(Request(epsUrl))
+		self.endDirs()
+			
 
- 		except:
- 			xbmc.log('Exception (onAction): ' + str(sys.exc_info()[0]))
- 			traceback.print_exc()
- 			self.close()
-			 
-w = TVGUI()
-w.doModal()
-del w
+if (__name__ == "__main__"):
+	handle = int(sys.argv[1])
+	pluginUrl = sys.argv[0]
+	arg = sys.argv[2]
+	
+	tv = DRtv(handle, pluginUrl, arg)
+	del tv
+
