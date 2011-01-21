@@ -22,8 +22,6 @@ class DRtv:
 		self.arg = a
 		if self.arg.startswith("?show"):
 			self.listEpisodes()
-		elif self.arg.startswith("?eps"):
-			self.playEpisode()
 		else:
 			self.listProgs()
 	
@@ -125,7 +123,7 @@ class DRtv:
 		xbmcplugin.endOfDirectory(self.handle)
 	
 	def epToItem(self, ep):
-		li = xbmcgui.ListItem(ep[1])
+		li = xbmcgui.ListItem(ep[0] + " - " + ep[1])
 		li.setInfo("video", {"title": ep[0], "plotoutline": ep[3]})
 		li.setThumbnailImage(ep[4])
 		return (self.getVideoURL(Request(ep[2])), li, False)
@@ -145,11 +143,6 @@ class DRtv:
 		progs = self.getProgrammes(baseURL+allURL)		
 		dirs = map(self.progToDir, progs)
 		xbmcplugin.addDirectoryItems(self.handle, dirs, len(dirs))
-		self.endDirs()
-
-	def playEpisode(self):
-		epsUrl = self.arg[5:]
-		vurl = self.getVideoURL(Request(epsUrl))
 		self.endDirs()
 			
 
