@@ -1,1 +1,9 @@
 http://www.dr.dk/odp/default.aspx?template=flad_alle_programserier
+
+
+json oversigt:
+
+http://www.dr.dk/NU/api/programseries
+
+rtmp eksempel:
+rtmpdump -r rtmp://vod.dr.dk/cms/ --playpath mp4:CMS/Resources/dr.dk/NETTV/DR1/2011/02/9136b735-45b5-4937-98e0-e5f03f4354bd/e5d6c81927d542c19a3c4b7e98b84a22_250.mp4 -o hest

@@ -1,12 +1,16 @@
 import sys
 import xbmc, xbmcgui, xbmcaddon, xbmcplugin
 import re
+import simplejson as json
 from urllib2 import Request, urlopen, unquote
 
-baseURL = "http://www.dr.dk/odp/"
-allURL  = "default.aspx?template=flad_alle_programserier"
+baseURL = "http://www.dr.dk/NU/api/"
+allURL  = "programseries"
 epsInfoUrl = "default.aspx?template=programserie&guid=" #concat with prog GUID
 epsLinkUrl = "default.aspx?template=flad_programserie&guid=" #concat with prog GUID
+
+imgWidth = '415'
+imgHeight = '233'
 
 def unescape(s):
         s = s.replace("&lt;", "<")
@@ -25,126 +29,89 @@ class DRtv:
 		else:
 			self.listProgs()
 	
-	def getProgrammes(self, url):
+ 	def getProgrammes(self, url):
 		response = urlopen(Request(url))
-		lines = response.readlines()
-		reTitle = re.compile('.*<div class="programTitle">(.*)</div>')
-		reLink = re.compile('.*<a href="(.*)">')
-		reGUID = re.compile('.*<a href=".*guid=(.*)">')
-		lookForLink = False
-		title = "";
-		link = "";
-		pairs = []
-		for line in lines:
-			line = unescape(line)
-			if lookForLink:
-				# tmp = re.match(reUid, line)
-				# if tmp:
-				# 	guid = tmp.group(1)
-				# 	print "DR GUID: " + guid
-				# else:
-				# 	print "DR NO GUID"
-				# res = re.match(reLink, line)
-				res = re.match(reGUID, line)
-				if res:
-					link = res.group(1)
-					lookForLink = False
-					pairs.append((title, link))
-				# if res:
-				# 	link = res.group(1)
-				# 	lookForLink = False
-				# 	pairs.append((title, link))
-			else:
-				res = re.match(reTitle, line)
-				if res:
-					title = res.group(1)
-					lookForLink = True
-		return pairs
+		j = json.loads(response.read())
+		res = []
+		for obj in j:
+			res.append(obj)
+		return res
 
 	def getEpisodes(self, guid):
-		response = urlopen(Request(baseURL + epsLinkUrl + guid))
-		infoResponse = urlopen(Request(baseURL + epsInfoUrl + guid))
-		lines = response.readlines()
-		infoLines = infoResponse.readlines()
-		reDate = re.compile('.*<div class="programTitle">.*<span class="date">(.*)</span></div>')
-		reLink = re.compile('.*<a href="(.*)">')
+		url = baseURL + allURL + '/' + guid + '/videos'
+		response = urlopen(Request(url))
 
-		reInfoTitle = re.compile('.*>(.*)<.*')
-		reInfoImg = re.compile('.*<img src="(.*)" .*')
-		reInfoDesc = re.compile('.*>(.*)<.*')
-		
-		lookForLink = False
-		title = ""
-		link = ""
-		desc = ""
-		img = ""
-		date = ""
-		pairs = []
-		for line in lines:
-			line = unescape(line)
-			if lookForLink:
-				res = re.match(reLink, line)
-				if res:
-					link = res.group(1)
-					lookForLink = False
-			 		pairs.append((title, date, link, desc, img))
-			else:
-				res = re.match(reDate, line)
-				if res:
-					date = res.group(1)
-					lookForLink = True
-					## find info
-					reInfoStart = re.compile('.*' + date + '.*')
-					desc = ""
-					img = ""
-					title = ""
-					for i in range(0, len(infoLines)):
-						infoRes = re.match(reInfoStart, infoLines[i])
-						if infoRes:
- 							infoRes = re.match(reInfoDesc, infoLines[i+1])
-							if infoRes:
-								desc = infoRes.group(1)
-								# print "DESC: " + desc
-							infoRes = re.match(reInfoImg, infoLines[i-2])
-							if infoRes:
-								img = infoRes.group(1)
-								# print "IMG: " + img
-							infoRes = re.match(reInfoTitle, infoLines[i-1])
-							if infoRes:
-								title = infoRes.group(1)
-								# print "TITLE: " + title
-							break
-		return pairs
+		return json.loads(response.read())
 
 	def getVideoURL(self, req):
-		return req.get_full_url()
+		response = urlopen(req)
+		j = json.loads(response.read())
+		# print j
+		return ((j['links'])[0])['uri']
 	
 	def endDirs(self):
-		xbmcplugin.endOfDirectory(self.handle)
+		xbmcplugin.endOfDirectory(self.handle, True, False, True)
 	
 	def epToItem(self, ep):
-		li = xbmcgui.ListItem(ep[0] + " - " + ep[1])
-		li.setInfo("video", {"title": ep[0], "plotoutline": ep[3]})
-		li.setThumbnailImage(ep[4])
-		return (self.getVideoURL(Request(ep[2])), li, False)
+		# print ep
+		vurl = self.getVideoURL(Request(ep['videoResourceUrl']))
+
+		playpath = '';
+		url = '';
+		if vurl.startswith('mms:'):
+			url = vurl
+		else:
+			parts = vurl.split('mp4:')
+			url = parts[0]
+			playpath = 'mp4:' + parts[1]
+			
+
+		print 'PUB: ' + ep['publishTime']
+			
+		li = xbmcgui.ListItem(label = ep['title'] + ' - ' + ep['formattedBroadcastTime'])
+
+		li.setProperty('PlayPath', playpath)
+
+		li.setInfo('video', {'title': ep['title'], "plot": ep['description'],
+				     'duration': ep['duration']})
+		img = baseURL + 'videos/' + str(ep['id']) + '/images/' + imgWidth + 'x' + imgHeight + '.jpg'
+		print 'IMG: ' + img
+		li.setThumbnailImage(img)
+		return (url, li, False)
 
 	def listEpisodes(self):
 		showUrl = self.arg[6:]
 		eps = self.getEpisodes(showUrl)
-		eps.reverse()
 		items = map(self.epToItem, eps);
 		xbmcplugin.addDirectoryItems(self.handle, items, len(items))
 		self.endDirs()
 		
 	def progToDir(self, prog):
-		return (self.pluginURL+"?show=" + prog[1], xbmcgui.ListItem(prog[0]), True)
+		li = xbmcgui.ListItem(prog['title'])
+		li.setInfo("video", {"title": prog['title'], 
+				     'plot': prog['description']})
+		li.setThumbnailImage(baseURL + 'videos/' + str(prog['newestVideoId']) + '/images/' + imgWidth + 'x' + imgHeight + '.jpg')
+		return (self.pluginURL+"?show=" + prog['slug'], li, True)
 
 	def listProgs(self):
 		progs = self.getProgrammes(baseURL+allURL)		
 		dirs = map(self.progToDir, progs)
 		xbmcplugin.addDirectoryItems(self.handle, dirs, len(dirs))
 		self.endDirs()
-			
+	def playEpisode(self):
+		# this method is not used right now
+		epsUrl = self.arg[5:]
+		vurl = self.getVideoURL(Request(epsUrl))
+		parts = vurl.split('mp4:')
+
+		li = xbmcgui.ListItem(vurl)
+		li.setProperty('PlayPath', 'mp4:' + parts[1])
+		xbmcplugin.setResolvedUrl(self.handle, False, li)
+		#xbmcplugin.addDirectoryItem(self.handle, parts[0], li, False)
+		xbmc.Player(xbmc.PLAYER_CORE_DVDPLAYER).play(parts[0], li)
+		# dirs = [(parts[0], li, False)]
+		# xbmcplugin.addDirectoryItems(self.handle, dirs, len(dirs))
+		#self.endDirs()
 
 if (__name__ == "__main__"):
 	handle = int(sys.argv[1])
