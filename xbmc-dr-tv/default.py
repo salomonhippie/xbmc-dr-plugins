@@ -41,8 +41,8 @@ class DRtv:
 		# print j
 		return ((j['links'])[0])['uri']
 	
-	def endDirs(self):
-		xbmcplugin.endOfDirectory(self.handle, True, False, False)
+	def endDirs(self, cache=False):
+		xbmcplugin.endOfDirectory(self.handle, True, cache, False)
 	
 	def epToItem(self, ep):
 		# print ep
@@ -91,7 +91,7 @@ class DRtv:
 		dirs = map(self.progToDir, progs)
 		xbmcplugin.setContent(self.handle, 'tvshows')
 		xbmcplugin.addDirectoryItems(self.handle, dirs, len(dirs))
-		self.endDirs()
+		self.endDirs(True)
 
 	# def playEpisode(self):
 	        # # this method is not used right now
